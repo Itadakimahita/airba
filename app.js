@@ -17,7 +17,7 @@ let userSessions = {}; // Сессии пользователей
 let newProducts = [
     {name: 'яблоки', description: 'сочный плод яблони, который употребляется в пищу в свежем и запеченном виде, служит сырьём в кулинарии и для приготовления напитков.'},
     {name: 'груши', description: 'род плодовых и декоративных деревьев и кустарников семейства розовые (Rosaceae), а также их плод.'}
-]; // Корзина из списков для пользователя
+]; // Новинки
 
 
 
@@ -44,6 +44,7 @@ app.post('/webhook', (req, res) => {
     const session = userSessions[userId];
     let responseText = "Что вы хотели бы заказать?";
 
+    //установление секретного слова
     if(userInput.includes('секретное слово')){
         if(!users[userId]){
             users[userId] = userInput.split(' ').at(-1)
@@ -103,7 +104,7 @@ app.post('/webhook', (req, res) => {
                         responseText = 'Я вас не поняла, пожалуйста повторите'
                     }
                     
-                } else if (session.awaitingOrder) {
+                } else if (session.awaitingOrder) { //ожидание заказа
                     if (userInput.includes('нет') || userInput.includes('хватит') || userInput.includes('достаточно')) {
                         responseText = "Завершить заказ?";
                         session.awaitingOrder = false;
@@ -118,7 +119,7 @@ app.post('/webhook', (req, res) => {
                             responseText = "Данного списка не существует. Может быть какой-нибудь другой? Для просмотра вашего заказа скажите \"заказ\"";
                         }
                     }
-                } else if (session.confirmingOrder) {
+                } else if (session.confirmingOrder) { //подтверждение заказа
                     if (userInput.includes('да')) {
                         responseText = `Ваш заказ на ${session.shoppingList.join(', ')} оформлен. Пожалуйста, оплатите заказ. Для завершения сессии скажите \"завершить\"`;
                         // placeOrder(session.shoppingList) // Реализация реального оформления заказа
@@ -132,7 +133,7 @@ app.post('/webhook', (req, res) => {
                         responseText = "Я вас не поняла. Повторите"
                     }
                 } else {
-                    const listName = userInput.split(' ').at(-1)
+                    const listName = userInput.split(' ').at(-1) //берется список как последнее слово запроса
                     if (shoppingLists[session.userId] && shoppingLists[session.userId].includes(listName)) {
                         session.shoppingList.push(listName);
                         session.awaitingOrder = true;
