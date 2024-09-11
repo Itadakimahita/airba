@@ -9,6 +9,54 @@ const app = express();
 app.use(bodyParser.json());
 app.use(cookieParser());
 
+// Function to retrieve the Workflow ID
+async function getWorkflowId() {
+    try {
+        const response = await axios.post('https://back-stage.airbafresh.kz/api/orders/workflow/actualize/', {
+            'city': 1
+        }); // Example API
+        if (response.status === 200) {
+            const workflow = response.data.data.uuid; // Assuming response contains workflow_id
+            console.log('Workflow ID retrieved:', workflow);
+            return workflow;
+        } else {
+            console.error('Error retrieving Workflow ID:', response.data);
+            return null;
+        }
+    } catch (error) {
+        console.error('Error during Workflow ID request:', error);
+        return null;
+    }
+}
+
+// Global variable to store the Workflow ID
+const workflowId = getWorkflowId();
+
+
+
+// Axios interceptor to inject Workflow ID into headers
+axios.interceptors.request.use(
+    async (config) => {
+        // Check if the Workflow ID is available
+        if (!workflowId) {
+            console.log('Workflow ID not available, fetching it...');
+            workflowId = await getWorkflowId(); // Fetch the Workflow ID
+        }
+
+        // If Workflow ID was fetched successfully, add it to headers
+        if (workflowId) {
+            config.headers['Workflow'] = workflowId;
+        } else {
+            console.error('Failed to retrieve Workflow ID');
+        }
+
+        return config;
+    },
+    (error) => {
+        return Promise.reject(error);
+    }
+);
+
 let users = {
     "1": [{name: "диас", number: "87775555355"}, {name: "дима", number: "87775555555"}], //yandexId : [name, number, authStatus]
     "2": [{name: "john", number: "87775555555"}],
@@ -226,7 +274,6 @@ async function sendSMSAuthorization(number) {
             mobile_phone: number
         }, {
             headers: {
-                'Workflow': 'e2d55565-618b-4668-b9c4-2171e52f055e',
                 'language': 'ru'
             }
         });
@@ -249,7 +296,6 @@ async function verifySms(number, sms) {
             otp: sms
         }, {
             headers: {
-                'Workflow': 'e2d55565-618b-4668-b9c4-2171e52f055e',
                 'language': 'ru'
             }
         });
