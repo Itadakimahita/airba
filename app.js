@@ -152,7 +152,7 @@ app.post('/webhook', (req, res) => {
             session.addingAccount = true;
         } else if (session.awaitingAuth) {
             if(session.awaitingSms){
-                if(userInput === '0000'){ // Подтверждение по смс позже заменить на готовый метод
+                if(verifySms(session.selectedUser.number, userInput)){ // Подтверждение по смс позже заменить на готовый метод
                     responseText = "Вы успешно авторизованы. Что вы хотели бы заказать?";
                     session.selectedUser.auth = true
                     refreshCookie(res, session.selectedUser.number);  // Refresh the cookie
@@ -169,6 +169,7 @@ app.post('/webhook', (req, res) => {
                     if(!cookies[`${number}_auth`]){
                         responseText = `Для подтверждения авторизации пользователя ${userInput} отправлено SMS. Пожалуйста, скажите код.`;
                         sendSMSAuthorization(session.selectedUser.number);  // Implement SMS sending logic here
+
                         session.awaitingSms = true;
                     } else {
                         responseText = "Вы успешно авторизованы. Что вы бы хотели заказать?";
@@ -221,10 +222,34 @@ function refreshCookie(res, number) {
 
 async function sendSMSAuthorization(number) {
     try {
-        const response = await axios.post('https://back-test.airbafresh.kz/api/v1/auth/signin/', {
+        const response = await axios.post('https://back-stage.airbafresh.kz/api/v1/auth/signin/', {
             mobile_phone: number
         }, {
             headers: {
+                'Workflow': 'e2d55565-618b-4668-b9c4-2171e52f055e',
+                'language': 'ru'
+            }
+        });
+
+        if (response.status === 200) {
+            console.log('OTP отправлен успешно');
+        } else {
+            console.error('Ошибка при отправке OTP:', response.data);
+        }
+    } catch (error) {
+        console.error('Ошибка при отправке запроса:', error);
+    }
+}
+
+
+async function verifySms(number, sms) {
+    try {
+        const response = await axios.post('https://back-stage.airbafresh.kz/api/v1/auth/otp-verify/', {
+            mobile_phone: number,
+            otp: sms
+        }, {
+            headers: {
+                'Workflow': 'e2d55565-618b-4668-b9c4-2171e52f055e',
                 'language': 'ru'
             }
         });
@@ -269,8 +294,8 @@ function getNumberByName(name, users){
 }
 
 
-app.listen(443, () => {
-    console.log('Server is running on port 443');
+app.listen(3000, () => {
+    console.log('Server is running on port 3000');
 });
 
 
