@@ -10,7 +10,7 @@ export async function paymentApply(workflowId: Promise<string | null>, token: st
                 'workflow': await workflowId
             }
         });
-        return response.data.data.order_acces_token;
+        return response.data.data?.order_access_token;
     } catch (error) {
         console.error('Error fetching lists:', error);
         return null;
@@ -25,7 +25,7 @@ export async function paymentConfirm(workflowId: Promise<string | null>, token: 
         address: string,
         startTime: string,
         endTime: string,
-        totalAmount: number
+        total_price: number
     } | null}> {
 
     try {
@@ -45,7 +45,7 @@ export async function paymentConfirm(workflowId: Promise<string | null>, token: 
                 address: response.data.data?.address ?? 'No address',
                 startTime: response.data.data.delivery_timeslot.start_time,
                 endTime: response.data.data.delivery_timeslot.end_time,
-                totalAmount: response.data.data?.total_amount ?? 0
+                total_price: response.data.data?.new_workflow?.delivery?.total_price ?? 0
             }
             : null;
 

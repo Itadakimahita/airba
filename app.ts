@@ -38,6 +38,9 @@ app.post('/webhook', async (req: Request, res: Response) => {
     session.proccessDone = false;
 
     if (session.awaitingProccess) {
+        if(userInput.includes('нет')){
+            endResponse(res, data, 'Всего доброго', savedUsers);
+        }
         session.awaitingProccess = false;
         sendResponse(session, res, data, session.awaitingResponseText, savedUsers);
     } else {
@@ -136,7 +139,7 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
                     session.selectedUser = {name: userInput, number: number, auth: newToken};
                     savedUsers[userInput] = {number: number, token: newToken, old_token: old_token}
                     refreshed = true
-                    responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину.";
+                    responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину для этого скажите \"Добавь\" и название вашего списка.";
                 }
             }
         }
@@ -159,7 +162,7 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
                                 
                 
                 session.selectedUser.auth = accessToken;
-                responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину.";
+                responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину для этого скажите \"Добавь\" и название вашего списка.";
             } else {
                 responseText = "Неверный код. Попробуйте снова.";
             }
@@ -234,7 +237,7 @@ async function confirmingUserOrder(userInput: string, session: Session, res: Res
             const timeslot = await closestTimeSlot(session.workflow);
             if(payment_card && timeslot){
                 const price = await workflowCheckout(session.workflow, session.selectedUser.auth, timeslot, payment_card);
-                responseText = `Оплатить заказ на сумму ${price ? price : 'ошибка'}?`;
+                responseText = `Оплатить заказ на сумму ${price ? price : 'ошибка'} тг?`;
                 session.paymentOrder = true;
             } else{
                 responseText = "Скорее всего у вас нет выбранной карты в приложении, пожалуйста подключите способ оплаты";
@@ -257,12 +260,18 @@ async function confirmingUserPayment(userInput: string, session: Session, res: R
     if (userInput.includes("да")) {
         if(session.selectedUser && session.selectedUser.auth){
             if(await orderCreate(session.workflow, session.selectedUser.auth)){
+                console.log('ordere');
+                
                 const order_token = await paymentApply(session.workflow, session.selectedUser.auth);
                 if(order_token){
+                    console.log('order_token');
+                    
                     const result = await paymentConfirm(session.workflow, session.selectedUser.auth);
                     if(result){
+                        console.log('result');
+                        
                         session.workflow = Promise.resolve(result.workflowUUID);
-                        responseText = `Ваш заказ на сумму ${result.deliveryInfo?.totalAmount} по адрессу ${result.deliveryInfo?.address}
+                        responseText = `Ваш заказ на сумму ${result.deliveryInfo?.total_price} тг по адрессу ${result.deliveryInfo?.address}
                          прибудет от ${result.deliveryInfo?.startTime} до ${result.deliveryInfo?.endTime}`;
                         session.confirmingOrder = false;
                         session.paymentOrder = false;
