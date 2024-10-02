@@ -37,12 +37,19 @@ app.post('/webhook', async (req: Request, res: Response) => {
 
     session.proccessDone = false;
 
-    if (session.awaitingProccess) {
+    if (session.endingSession) {
+        delete userSessions[yandexUserId];
+        endResponse(res, data, 'Всего доброго', savedUsers);
+    }
+    else if (session.awaitingProccess) {
         if(userInput.includes('нет')){
+            delete userSessions[yandexUserId];
             endResponse(res, data, 'Всего доброго', savedUsers);
+        } else {
+            session.awaitingProccess = false;
+            setTimeout(() => sendResponse(session, res, data, session.awaitingResponseText, savedUsers), 1500)
+            
         }
-        session.awaitingProccess = false;
-        sendResponse(session, res, data, session.awaitingResponseText, savedUsers);
     } else {
         // resetSessionTimer(session, res, data, savedUsers);
         await main(data, userInput, session, res, savedUsers);
@@ -61,7 +68,7 @@ app.post('/webhook', async (req: Request, res: Response) => {
 //     }, 1500)
 // }
 
-async function raceWithTimeout(taskPromise: Promise<any>, timeoutMessage: string, timeoutDuration = 2100) {
+async function raceWithTimeout(taskPromise: Promise<any>, timeoutMessage: string, timeoutDuration = 4500) {
     const timeout = new Promise((resolve) => {
         setTimeout(() => {
             resolve(timeoutMessage);
@@ -76,11 +83,7 @@ async function main(data: any, userInput: string, session: Session, res: Respons
     let responseText = '';
 
     const entireProcessPromise = new Promise(async (resolve) => {
-        if (session.endingSession) {
-            responseText = 'Всего доброго';
-            endResponse(res, data, responseText, savedUsers);
-            resolve(responseText);
-        } else if (session.paymentOrder) {
+        if (session.paymentOrder) {
             responseText = await confirmingUserPayment(userInput, session, res);
             session.awaitingResponseText = responseText;
             resolve(responseText);
@@ -100,8 +103,7 @@ async function main(data: any, userInput: string, session: Session, res: Respons
     });
 
     // Используем Promise.race для отслеживания общего времени выполнения
-    responseText = await raceWithTimeout(entireProcessPromise, 'Запрос в обработке, хотите продолжить?', 2100);
-
+    responseText = await raceWithTimeout(entireProcessPromise, 'Запрос в обработке, хотите продолжить?', 2300);
     sendResponse(session, res, data, responseText, savedUsers);
 }
 
@@ -137,7 +139,12 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
                 
                 if(newToken){
                     session.selectedUser = {name: userInput, number: number, auth: newToken};
-                    savedUsers[userInput] = {number: number, token: newToken, old_token: old_token}
+                    savedUsers[userInput] = {
+                        ...savedUsers[userInput],
+                        number: session.selectedUser.number, 
+                        token: newToken,
+                        old_token: old_token,
+                    };
                     refreshed = true
                     responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину для этого скажите \"Добавь\" и название вашего списка.";
                 }
@@ -153,12 +160,25 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
         else if (session.awaitingSms && session.selectedUser) {
             const [ accessToken, refreshToken ] = await verifySms(session.selectedUser.number, userInput, session.workflow);
             if (accessToken && refreshToken) {
-                // Add or update user data
-                savedUsers[session.selectedUser.name] = {
-                    number: session.selectedUser.number,
-                    token: refreshToken,
-                    old_token: accessToken,
-                };
+
+                console.log(accessToken, refreshToken);
+                
+                if (savedUsers[session.selectedUser.name]) {
+                    savedUsers[session.selectedUser.name] = {
+                        ...savedUsers[session.selectedUser.name],
+                        number: session.selectedUser.number, 
+                        token: refreshToken,
+                        old_token: accessToken,
+                    };
+                } else {
+                    // Если пользователь новый, создаем новую запись
+                    savedUsers[session.selectedUser.name] = {
+                        number: session.selectedUser.number,
+                        token: refreshToken,
+                        old_token: accessToken,
+                    };
+                }
+                
                                 
                 
                 session.selectedUser.auth = accessToken;
@@ -191,7 +211,7 @@ async function processUserCommands(userInput: string, session: Session, res: Res
         responseText = "Вот новинки: " + newProducts.map(product => `${product.name}: ${product.description}`).join(", ");
     } 
     else if(userInput.includes('заказ')){
-        responseText = 'Ваш заказ на ' + (await getCartProducts(session.workflow)).join()
+        responseText = 'Ваш заказ на ' + (await getCartProducts(session.workflow)).join(', ')
     }
     else if(userInput.includes('достаточно') || userInput.includes('нет') || userInput.includes('все')){
         responseText = 'Хотите оформить заказ на ' + (await getCartProducts(session.workflow)).join()
@@ -237,8 +257,10 @@ async function confirmingUserOrder(userInput: string, session: Session, res: Res
             const timeslot = await closestTimeSlot(session.workflow);
             if(payment_card && timeslot){
                 const price = await workflowCheckout(session.workflow, session.selectedUser.auth, timeslot, payment_card);
-                responseText = `Оплатить заказ на сумму ${price ? price : 'ошибка'} тг?`;
+                session.priceOrder = price;
+                responseText = `Оплатить заказ на сумму ${price ? price : 'ошибка'} тенге?`;
                 session.paymentOrder = true;
+                session.confirmingOrder = false;
             } else{
                 responseText = "Скорее всего у вас нет выбранной карты в приложении, пожалуйста подключите способ оплаты";
             }
@@ -247,6 +269,7 @@ async function confirmingUserOrder(userInput: string, session: Session, res: Res
     } else if(userInput.includes('нет')){
         responseText = 'Заказ отменен';
         session.confirmingOrder = false;
+        session.endingSession = true;
     } else {
         responseText = "Извините я вас не поняла, хотите оформить заказ?";
     }
@@ -255,12 +278,12 @@ async function confirmingUserOrder(userInput: string, session: Session, res: Res
 }
 
 async function confirmingUserPayment(userInput: string, session: Session, res: Response): Promise<string> {
-    let responseText = "Извините что-то пошло не так, попробуйте еще раз";
+    let responseText = "";
 
     if (userInput.includes("да")) {
         if(session.selectedUser && session.selectedUser.auth){
             if(await orderCreate(session.workflow, session.selectedUser.auth)){
-                console.log('ordere');
+                console.log('order');
                 
                 const order_token = await paymentApply(session.workflow, session.selectedUser.auth);
                 if(order_token){
@@ -271,11 +294,10 @@ async function confirmingUserPayment(userInput: string, session: Session, res: R
                         console.log('result');
                         
                         session.workflow = Promise.resolve(result.workflowUUID);
-                        responseText = `Ваш заказ на сумму ${result.deliveryInfo?.total_price} тг по адрессу ${result.deliveryInfo?.address}
-                         прибудет от ${result.deliveryInfo?.startTime} до ${result.deliveryInfo?.endTime}`;
+                        responseText = `Ваш заказ на сумму ${session.priceOrder} тенге оформлен по адрессу ${result.deliveryInfo?.address}
+                         прибудет от ${result.deliveryInfo?.startTime} до ${result.deliveryInfo?.endTime}. Для завершения сесси скажите \"Хватит\"`;
                         session.confirmingOrder = false;
                         session.paymentOrder = false;
-                        session.endingSession = true;
                     }
                 }
             } 
@@ -285,6 +307,7 @@ async function confirmingUserPayment(userInput: string, session: Session, res: R
         responseText = 'Заказ отменен';
         session.confirmingOrder = false;
         session.paymentOrder = false;
+        session.endingSession = true;
     } else {
         responseText = "Извините я вас не поняла, хотите оплатить заказ?";
     }

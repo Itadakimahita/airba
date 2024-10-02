@@ -19,14 +19,19 @@ export async function sendSMSAuthorization(number: string, workflowId: Promise<s
 // Verifies OTP
 export async function verifySms(number: string, sms: string, workflowId: Promise<string | null>): Promise<[string | null, string | null]> {
     try {
+        // Оставляем только цифры в SMS-коде
+        const cleanedSms = sms.replace(/\D/g, '');
+
         const response = await apiClient.post('/api/v1/auth/otp-verify/', {
-            mobile_phone: number, otp: sms
+            mobile_phone: number,
+            otp: cleanedSms,  // Используем очищенный SMS-код
         },
         {
             headers: {
                 'workflow': await workflowId
             }
         });
+
         return [response.data.data.access_token, response.data.data.refresh_token];
     } catch (error) {
         console.error('Error verifying OTP:', error);

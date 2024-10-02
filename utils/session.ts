@@ -11,7 +11,8 @@ export interface Session {
     proccessDone: boolean;
     awaitingProccess: boolean;
     awaitingResponseText: string;
-    timerCount: NodeJS.Timeout | null;
+
+    priceOrder: number | null;
 
     selectedUser: User | null;
     addingAccount: boolean;
@@ -31,7 +32,8 @@ export const initializeSession = (): Session => {
             proccessDone: false,
             awaitingProccess: false,
             awaitingResponseText: '',
-            timerCount: null,
+
+            priceOrder: null,
 
             selectedUser: null,
             addingAccount: false,
