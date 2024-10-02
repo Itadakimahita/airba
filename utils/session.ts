@@ -6,7 +6,13 @@ export interface Sessions {
 }
 
 export interface Session {
-    workflow: Promise<string | null>,
+    workflow: Promise<string | null>;
+
+    proccessDone: boolean;
+    awaitingProccess: boolean;
+    awaitingResponseText: string;
+    timerCount: NodeJS.Timeout | null;
+
     selectedUser: User | null;
     addingAccount: boolean;
     awaitingAuth: boolean;
@@ -14,12 +20,19 @@ export interface Session {
     confirmingOrder: boolean;
     paymentOrder: boolean;
     endingSession: boolean;
+
 }
 
 // Initialize a new session with the current user ID
 export const initializeSession = (): Session => {
     return {
             workflow: getWorkflowId(),
+
+            proccessDone: false,
+            awaitingProccess: false,
+            awaitingResponseText: '',
+            timerCount: null,
+
             selectedUser: null,
             addingAccount: false,
             awaitingAuth: false,
@@ -31,7 +44,8 @@ export const initializeSession = (): Session => {
 };
 
 // Utility function to send a response
-export const sendResponse = (res: any, data: any, text: string, savedUsers: Users): void => {
+export const sendResponse = (session: Session, res: any, data: any, text: string, savedUsers: Users): void => {
+    if(text === 'Запрос в обработке, хотите продолжить?') session.awaitingProccess = true
     res.json({
         response: {
             text: text,
@@ -40,7 +54,8 @@ export const sendResponse = (res: any, data: any, text: string, savedUsers: User
         session: data.session,
         user_state_update: {users: savedUsers},
         version: data.version,
-    });
+    })
+    
 };
 
 // Utility function to send a response

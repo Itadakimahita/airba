@@ -37,15 +37,10 @@ export async function verifySms(number: string, sms: string, workflowId: Promise
 // Sends SMS authorization
 export async function refreshToken(refresh_token: string, token: string): Promise<string | null> {
     try {
-
-        console.log(refresh_token);
-        console.log(token);
-        
         const response = await apiClient.post('/api/v1/auth/refresh/', {
             refresh: refresh_token,
             old_token: token
         });
-        console.log(response.data);
         
         return response.data.data.access_token;
     } catch (error) {

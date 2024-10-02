@@ -17,7 +17,6 @@ app.use(bodyParser.json());
 app.use(serveStatic('public'));
 
 
-
 export let userSessions: Sessions = {};
 
 const newProducts = [
@@ -29,37 +28,79 @@ app.post('/webhook', async (req: Request, res: Response) => {
     const data = req.body;
     const userInput = data.request.command.toLowerCase();
     const yandexUserId = data.session.user_id;
-    // Чтение текущего состояния пользователей
-    const savedUsers : Users = data.state?.user?.users || {};
+    const savedUsers: Users = data.state?.user?.users || {};
 
-    if(!userSessions[yandexUserId]){
-        userSessions[yandexUserId] = initializeSession()
+    if (!userSessions[yandexUserId]) {
+        userSessions[yandexUserId] = initializeSession();
     }
-    const session = userSessions[yandexUserId]
+    const session = userSessions[yandexUserId];
 
-    let responseText = "Что вы хотели бы сделать?";
+    session.proccessDone = false;
 
-    if(session.endingSession){
-        responseText = 'Всего доброго';
-        endResponse(res, data, responseText, savedUsers);
+    if (session.awaitingProccess) {
+        session.awaitingProccess = false;
+        sendResponse(session, res, data, session.awaitingResponseText, savedUsers);
+    } else {
+        // resetSessionTimer(session, res, data, savedUsers);
+        await main(data, userInput, session, res, savedUsers);
+
     }
-    else if(session.paymentOrder){
-        responseText = await confirmingUserPayment(userInput, session, res);
-    }
-    else if(session.confirmingOrder){
-        responseText = await confirmingUserOrder(userInput, session, res);
-    }
-    // If the user is selected and authorized, they can execute commands like viewing новинки or adding products to the cart
-    else if (session.selectedUser && session.selectedUser.auth) {
-        responseText = await processUserCommands(userInput, session, res);
-    } 
-    // Otherwise, the user is in the authorization process
-    else {
-        responseText = await handleAuthFlow(userInput, session, res, savedUsers);
-    }
-    
-    sendResponse(res, data, responseText, savedUsers);
 });
+
+// async function resetSessionTimer(session: Session, res: Response, data: any, savedUsers: Users) {
+//     if (session.timerCount) clearTimeout(session.timerCount);
+
+    
+//     session.timerCount = setTimeout(() => {
+//         sendResponse(session, res, data, 'Ваш запрос обрабатывается, хотите продолжить?', savedUsers);
+//         session.awaitingProccess = true;
+//         session.timerCount = null;
+//     }, 1500)
+// }
+
+async function raceWithTimeout(taskPromise: Promise<any>, timeoutMessage: string, timeoutDuration = 2100) {
+    const timeout = new Promise((resolve) => {
+        setTimeout(() => {
+            resolve(timeoutMessage);
+        }, timeoutDuration);
+    });
+
+    return Promise.race([taskPromise, timeout]);
+}
+
+
+async function main(data: any, userInput: string, session: Session, res: Response, savedUsers: any) {
+    let responseText = '';
+
+    const entireProcessPromise = new Promise(async (resolve) => {
+        if (session.endingSession) {
+            responseText = 'Всего доброго';
+            endResponse(res, data, responseText, savedUsers);
+            resolve(responseText);
+        } else if (session.paymentOrder) {
+            responseText = await confirmingUserPayment(userInput, session, res);
+            session.awaitingResponseText = responseText;
+            resolve(responseText);
+        } else if (session.confirmingOrder) {
+            responseText = await confirmingUserOrder(userInput, session, res);
+            session.awaitingResponseText = responseText;
+            resolve(responseText);
+        } else if (session.selectedUser && session.selectedUser.auth) {
+            responseText = await processUserCommands(userInput, session, res);
+            session.awaitingResponseText = responseText;
+            resolve(responseText);
+        } else {
+            responseText = await handleAuthFlow(userInput, session, res, savedUsers);
+            session.awaitingResponseText = responseText;
+            resolve(responseText);
+        }
+    });
+
+    // Используем Promise.race для отслеживания общего времени выполнения
+    responseText = await raceWithTimeout(entireProcessPromise, 'Запрос в обработке, хотите продолжить?', 2100);
+
+    sendResponse(session, res, data, responseText, savedUsers);
+}
 
 async function handleAuthFlow(userInput: string, session: Session, res: Response, savedUsers: any): Promise<string> {
     let responseText = "";
@@ -90,7 +131,6 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
             if(savedUsers[userInput].token && savedUsers[userInput].old_token && number){
                 const old_token = savedUsers[userInput].old_token;
                 const newToken = await refreshToken(savedUsers[userInput].token, savedUsers[userInput].old_token);
-                console.log(newToken);
                 
                 if(newToken){
                     session.selectedUser = {name: userInput, number: number, auth: newToken};
@@ -124,7 +164,7 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
                 responseText = "Неверный код. Попробуйте снова.";
             }
         }
-        else{
+        else if(!refreshed && !number){
             responseText = "Такого пользователя не существует, пожалуйста повторите! Или добавьте нового";
         }
     }
@@ -137,10 +177,6 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
         responseText = `Пожалуйтса выберите пользователя из существующих ${Object.keys(savedUsers).join(', ')} или добавьте нового сказав, новый пользователь`;
     }
 
-    // // Save the updated users data in user_state_update
-    // res.setHeader('user_state_update', JSON.stringify({
-    //     users: savedUsers
-    // }));
 
     return responseText;
 }

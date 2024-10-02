@@ -37,7 +37,7 @@ export async function closestTimeSlot(workflowId: Promise<string | null>) {
 }
 
 //Checkout before Ordere create
-export async function workflowCheckout(workflowId: Promise<string | null>, token: string, timeslotId: number, paymentCardId: number) {
+export async function workflowCheckout(workflowId: Promise<string | null>, token: string, timeslotId: number, paymentCardId: number) : Promise<number|null> {
     try {
         const response = await apiClient.post('/api/orders/workflow/checkout-v2/', 
         {
@@ -59,7 +59,11 @@ export async function workflowCheckout(workflowId: Promise<string | null>, token
             }   
         });
 
-        return response.data.data?.total_amout;
+
+        
+        
+
+        return response.data.data?.total_amount;
     } catch (error) {
         console.error('Error fetching lists:', error);
         return null;
