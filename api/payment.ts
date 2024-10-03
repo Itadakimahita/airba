@@ -35,8 +35,6 @@ export async function paymentConfirm(workflowId: Promise<string | null>, token: 
                 'workflow': await workflowId
             }
         });
-
-        console.log(response.data.data);
         
 
         // Extract new_workflow UUID

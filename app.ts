@@ -28,14 +28,14 @@ app.post('/webhook', async (req: Request, res: Response) => {
     const data = req.body;
     const userInput = data.request.command.toLowerCase();
     const yandexUserId = data.session.user_id;
-    const savedUsers: Users = data.state?.user?.users || {};
-
+    
     if (!userSessions[yandexUserId]) {
         userSessions[yandexUserId] = initializeSession();
     }
     const session = userSessions[yandexUserId];
 
-    session.proccessDone = false;
+    const savedUsers: Users = (session.savedUsers) ? session.savedUsers : (data.state?.user?.users || {});
+
 
     if (session.endingSession) {
         delete userSessions[yandexUserId];
@@ -46,12 +46,19 @@ app.post('/webhook', async (req: Request, res: Response) => {
             delete userSessions[yandexUserId];
             endResponse(res, data, 'Всего доброго', savedUsers);
         } else {
-            session.awaitingProccess = false;
-            setTimeout(() => sendResponse(session, res, data, session.awaitingResponseText, savedUsers), 1500)
+            if (session.proccessDone){
+                session.awaitingProccess = false;
+                sendResponse(session, res, data, session.awaitingResponseText, savedUsers);
+            } else {
+                session.awaitingProccess = true;
+                sendResponse(session, res, data, 'Запрос в обработке, хотите продолжить?', savedUsers);
+            }
+            
             
         }
     } else {
         // resetSessionTimer(session, res, data, savedUsers);
+        session.proccessDone = false;
         await main(data, userInput, session, res, savedUsers);
 
     }
@@ -86,7 +93,7 @@ async function main(data: any, userInput: string, session: Session, res: Respons
         if (session.paymentOrder) {
             responseText = await confirmingUserPayment(userInput, session, res);
             session.awaitingResponseText = responseText;
-            resolve(responseText);
+            resolve(responseText)
         } else if (session.confirmingOrder) {
             responseText = await confirmingUserOrder(userInput, session, res);
             session.awaitingResponseText = responseText;
@@ -103,7 +110,7 @@ async function main(data: any, userInput: string, session: Session, res: Respons
     });
 
     // Используем Promise.race для отслеживания общего времени выполнения
-    responseText = await raceWithTimeout(entireProcessPromise, 'Запрос в обработке, хотите продолжить?', 2300);
+    responseText = await raceWithTimeout(entireProcessPromise.finally(() => session.proccessDone = true), 'Запрос в обработке, хотите продолжить?', 2300);
     sendResponse(session, res, data, responseText, savedUsers);
 }
 
@@ -134,17 +141,19 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
         let refreshed = false;
         if(savedUsers[userInput]){
             if(savedUsers[userInput].token && savedUsers[userInput].old_token && number){
-                const old_token = savedUsers[userInput].old_token;
+                const refresh_token = savedUsers[userInput].token;
                 const newToken = await refreshToken(savedUsers[userInput].token, savedUsers[userInput].old_token);
                 
                 if(newToken){
                     session.selectedUser = {name: userInput, number: number, auth: newToken};
-                    savedUsers[userInput] = {
-                        ...savedUsers[userInput],
-                        number: session.selectedUser.number, 
-                        token: newToken,
-                        old_token: old_token,
+                    savedUsers[session.selectedUser.name] = {
+                        number: session.selectedUser.number,
+                        token: refresh_token,
+                        old_token: newToken,
                     };
+                    console.log(savedUsers);
+                    session.savedUsers = savedUsers;
+                    
                     refreshed = true
                     responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину для этого скажите \"Добавь\" и название вашего списка.";
                 }
@@ -165,7 +174,6 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
                 
                 if (savedUsers[session.selectedUser.name]) {
                     savedUsers[session.selectedUser.name] = {
-                        ...savedUsers[session.selectedUser.name],
                         number: session.selectedUser.number, 
                         token: refreshToken,
                         old_token: accessToken,
@@ -178,6 +186,8 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
                         old_token: accessToken,
                     };
                 }
+                console.log(savedUsers);
+                session.savedUsers = savedUsers;
                 
                                 
                 
@@ -211,7 +221,7 @@ async function processUserCommands(userInput: string, session: Session, res: Res
         responseText = "Вот новинки: " + newProducts.map(product => `${product.name}: ${product.description}`).join(", ");
     } 
     else if(userInput.includes('заказ')){
-        responseText = 'Ваш заказ на ' + (await getCartProducts(session.workflow)).join(', ')
+        responseText = 'Ваш заказ на ' + (await getCartProducts(session.workflow)).join(', ') + ' хотели бы заказть что-нибудь еще?'
     }
     else if(userInput.includes('достаточно') || userInput.includes('нет') || userInput.includes('все')){
         responseText = 'Хотите оформить заказ на ' + (await getCartProducts(session.workflow)).join()

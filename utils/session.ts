@@ -8,6 +8,8 @@ export interface Sessions {
 export interface Session {
     workflow: Promise<string | null>;
 
+    savedUsers: Users | null;
+
     proccessDone: boolean;
     awaitingProccess: boolean;
     awaitingResponseText: string;
@@ -29,6 +31,8 @@ export const initializeSession = (): Session => {
     return {
             workflow: getWorkflowId(),
 
+            savedUsers: null,
+
             proccessDone: false,
             awaitingProccess: false,
             awaitingResponseText: '',
@@ -48,13 +52,14 @@ export const initializeSession = (): Session => {
 // Utility function to send a response
 export const sendResponse = (session: Session, res: any, data: any, text: string, savedUsers: Users): void => {
     if(text === 'Запрос в обработке, хотите продолжить?') session.awaitingProccess = true
+    
     res.json({
         response: {
             text: text,
             end_session: false,
         },
         session: data.session,
-        user_state_update: {users: savedUsers},
+        user_state_update: {value: null, users: savedUsers},
         version: data.version,
     })
     
