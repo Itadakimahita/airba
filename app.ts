@@ -232,7 +232,7 @@ async function processUserCommands(userInput: string, session: Session, res: Res
                     listToCart(session.selectedUser.auth, session.workflow, productToAdd.id)
                     responseText = `${productToAdd.title} добавлен в корзину. Что-нибудь еще?`;  
                 } else {
-                    responseText = `Извините, но сейчас товаров: ${hasInStock.join(' ')} нет на скалде, можеты вы хотели бы заказть что-нибудь еще?`
+                    responseText = `Извините, но сейчас товаров: ${hasInStock.join(' ')} нет на складе, можеты вы хотели бы заказть что-нибудь еще?`
                 }
                 
             } else {
