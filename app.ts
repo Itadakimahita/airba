@@ -221,7 +221,7 @@ async function processUserCommands(userInput: string, session: Session, res: Res
         responseText = "Вот новинки: " + newProducts.map(product => `${product.name}: ${product.description}`).join(", ");
     } 
     else if(userInput.includes('заказ')){
-        responseText = 'Ваш заказ на ' + (await getCartProducts(session.workflow)).join(', ') + ' хотели бы заказть что-нибудь еще?'
+        responseText = 'Ваш заказ на ' + (await getCartProducts(session.workflow)).join(', ') + ' хотели бы заказать что-нибудь еще?'
     }
     else if(userInput.includes('достаточно') || userInput.includes('нет') || userInput.includes('все')){
         responseText = 'Хотите оформить заказ на ' + (await getCartProducts(session.workflow)).join()
@@ -242,7 +242,7 @@ async function processUserCommands(userInput: string, session: Session, res: Res
                     listToCart(session.selectedUser.auth, session.workflow, productToAdd.id)
                     responseText = `${productToAdd.title} добавлен в корзину. Что-нибудь еще?`;  
                 } else {
-                    responseText = `Извините, но сейчас товаров: ${hasInStock.join(' ')} нет на складе, можеты вы хотели бы заказть что-нибудь еще?`
+                    responseText = `Извините, но сейчас товаров: ${hasInStock.join(' ')} нет на складе, может вы хотели бы заказать что-нибудь еще?`
                 }
                 
             } else {
