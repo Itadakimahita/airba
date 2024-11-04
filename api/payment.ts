@@ -1,13 +1,13 @@
 import apiClient from '../middleware/interceptor';
 
 //Applying order
-export async function paymentApply(workflowId: Promise<string | null>, token: string, ) : Promise<string|null> {
+export async function paymentApply(workflowId: string | null, token: string, ) : Promise<string|null> {
     try {
         const response = await apiClient.post('/api/payments/apply/', {},
         {
             headers: {
                 'Authorization': `JWT ${token}`,
-                'workflow': await workflowId
+                'workflow': workflowId
             }
         });
         return response.data.data?.order_access_token;
@@ -19,7 +19,7 @@ export async function paymentApply(workflowId: Promise<string | null>, token: st
 
 
 
-export async function paymentConfirm(workflowId: Promise<string | null>, token: string) : Promise<{
+export async function paymentConfirm(workflowId: string | null, token: string) : Promise<{
     workflowUUID: string | null,
     deliveryInfo: {
         address: string,
@@ -32,7 +32,7 @@ export async function paymentConfirm(workflowId: Promise<string | null>, token: 
         const response = await apiClient.post('/api/payments/confirm/', {}, {
             headers: { 
                 'Authorization': `JWT ${token}`,
-                'workflow': await workflowId
+                'workflow': workflowId
             }
         });
         

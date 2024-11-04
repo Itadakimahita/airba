@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import bodyParser from 'body-parser';
 import serveStatic from 'serve-static';
 
+
 import { sendSMSAuthorization, verifySms, getLists, refreshToken } from './api/auth';
 import { getNumberByName, extractNameAndNumber, User, Users } from './utils/user';
 import { initializeSession, sendResponse, Sessions, Session, endResponse } from './utils/session';
@@ -9,6 +10,213 @@ import { apiConfig, updateTokens } from './middleware/config';  // Import the co
 import { checkProducts, getCartProducts, listToCart } from './api/cart';
 import { closestTimeSlot, orderCreate, paymentCards, workflowCheckout } from './api/order';
 import { paymentApply, paymentConfirm } from './api/payment';
+
+import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
+import { StateGraph } from "@langchain/langgraph";
+import { MemorySaver, Annotation } from "@langchain/langgraph";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
+import { ChatOllama } from '@langchain/ollama';
+
+require('dotenv').config();
+
+
+const StateAnnotation = Annotation.Root({
+    messages: Annotation<BaseMessage[]>({
+      reducer: (x, y) => x.concat(y),
+    })
+})
+
+// // Определим инструменты для каждой из API-функций
+// const sendSMSTool = tool(async ({ number, workflow }) => {
+//     return await sendSMSAuthorization(number, workflow);
+// }, {
+//     name: "sendSMSAuthorization",
+//     description: "Send SMS to user for authorization",
+//     schema: z.object({
+//         number: z.string().describe("Phone number of the user"),
+//         workflow: z.string().describe("Workflow ID")
+//     }),
+// });
+
+// const verifySmsTool = tool(async ({ number, code, workflow }) => {
+//     return await verifySms(number, code, workflow);
+// }, {
+//     name: "verifySms",
+//     description: "Verify SMS code",
+//     schema: z.object({
+//         number: z.string().describe("Phone number of the user"),
+//         code: z.string().describe("SMS code for verification"),
+//         workflow: z.string().describe("Workflow ID")
+//     }),
+// });
+
+// const getListsTool = tool(async ({ auth, workflow }) => {
+//     return await getLists(auth, workflow);
+// }, {
+//     name: "getLists",
+//     description: "Get product lists",
+//     schema: z.object({
+//         auth: z.string().describe("User's auth token"),
+//         workflow: z.string().describe("Workflow ID")
+//     }),
+// });
+
+// Добавляем другие инструменты для корзины и продуктов
+const getCartProductsTool = tool(async ({}, config) => {
+    const configuration = config['configurable'];
+    const workflow = configuration['thread_id'];
+    const responseText = 'Ваш заказ на ' + (await getCartProducts(workflow)).join(', ') + ' хотели бы заказать что-нибудь еще?';
+    return responseText;
+}, {
+    name: "getCartProducts",
+    description: "Get products from cart",
+    schema: z.object({
+        workflow: z.string().describe("Workflow ID"),
+    }),
+});
+
+const listToCartTool = tool(async ({ userInput }, config) => {
+    // Проверяем, есть ли auth и workflow в сессии
+    const configuration = config['configurable'];
+    const auth = configuration['auth_token'];
+    const workflow = configuration['thread_id'];
+
+    if (!auth || !workflow) {
+        return "Ошибка: не удалось найти авторизационные данные. Пожалуйста, войдите в систему.";
+    }
+
+    const products = await getLists(auth, workflow); 
+    
+    const productToAdd = products.find(product => userInput.toLowerCase().includes(product.title.toLowerCase()));
+    
+    if (productToAdd) {
+        const productsCount = await checkProducts(workflow, auth, productToAdd.id);
+        let outOfStockItems: string[] = [];
+
+        productsCount.forEach(item => {
+            if (item.stockCount < 1) outOfStockItems.push(item.name);
+        });
+
+        if (outOfStockItems.length === 0) {
+            await listToCart(auth, workflow, productToAdd.id);
+            return `${productToAdd.title} добавлен в корзину. Что-нибудь еще?`;
+        } else {
+            return `Извините, но товаров: ${outOfStockItems.join(', ')} нет на складе. Хотите заказать что-то другое?`;
+        }
+    } else {
+        return "Продукт не найден. Пожалуйста, попробуйте снова.";
+    }
+}, {
+    name: "listToCart",
+    description: "Add product to cart",
+    schema: z.object({
+        userInput: z.string().describe("User input containing product list name")
+    }),
+});
+
+const confirmOrderTool = tool(async ({ userInput }, config) => {
+    const configuration = config['configurable'];
+    const auth = configuration['auth_token'];
+    const workflow = configuration['thread_id'];
+
+    if (!auth || !workflow) {
+        return "Ошибка: не удалось найти авторизационные данные. Пожалуйста, войдите в систему.";
+    }
+
+        const payment_card = await paymentCards(auth, workflow);
+        const timeslot = await closestTimeSlot(workflow);
+        
+        if (payment_card && timeslot) {
+            const price = await workflowCheckout(workflow, auth, timeslot, payment_card);
+            return `Оплатить заказ на сумму ${price ? price : 'ошибка'} тенге?`;
+        } else {
+            return "Скорее всего у вас нет выбранной карты в приложении, пожалуйста подключите способ оплаты";
+        }
+}, {
+    name: "confirmOrder",
+    description: "Confirm the order placement after adding listToCart",
+    schema: z.object({
+        userInput: z.string().describe("User's input for confirming the order")
+    })
+});
+
+const confirmPaymentTool = tool(async ({ userInput }, config) => {
+    const configuration = config['configurable'];
+    const auth = configuration['auth_token'];
+    const workflow = configuration['thread_id'];
+
+    if (!auth || !workflow) {
+        return "Ошибка: не удалось найти авторизационные данные. Пожалуйста, войдите в систему.";
+    }
+
+        const orderCreated = await orderCreate(workflow, auth);
+        
+        if (orderCreated) {
+            const order_token = await paymentApply(workflow, auth);
+            
+            if (order_token) {
+                const result = await paymentConfirm(workflow, auth);
+                
+                if (result) {
+                    return `Ваш заказ на сумму ${result.deliveryInfo?.total_price} тенге оформлен по адресу ${result.deliveryInfo?.address}. Прибудет от ${result.deliveryInfo?.startTime} до ${result.deliveryInfo?.endTime}. Для завершения сессии скажите "Хватит"`;
+                }
+            }
+        }
+        return "Ошибка при подтверждении оплаты. Попробуйте снова.";
+
+}, {
+    name: "confirmPayment",
+    description: "Confirm the payment for the order",
+    schema: z.object({
+        userInput: z.string().describe("User's input for confirming the payment")
+    })
+});
+
+const tools = [getCartProductsTool, listToCartTool, confirmOrderTool, confirmPaymentTool];
+
+
+const model = new ChatOllama({
+    baseUrl: 'http://127.0.0.1:11434',
+    model: "llama3.1:8b",
+    temperature: 0,
+}).bindTools(tools);
+
+// Функция для вызова модели
+async function callModel(state: typeof StateAnnotation.State) {
+    const messages = state.messages;
+    const response = await model.invoke(messages);
+  
+    return { messages: [response] };
+  }
+  
+  // Функция для принятия решения, продолжать ли вызов
+function shouldContinue(state: typeof StateAnnotation.State) {
+    const messages = state.messages;
+    const lastMessage = messages[messages.length - 1] as AIMessage;
+  
+    if (lastMessage.tool_calls?.length) {
+      return "tools";
+    }
+    return "__end__";
+  }
+  
+  // Создание графа
+  const graphs = new StateGraph(StateAnnotation)
+    .addNode("agent", callModel)
+    .addNode("tools", new ToolNode(tools))  // Подключаем наши инструменты
+    .addEdge("__start__", "agent")
+    .addConditionalEdges("agent", shouldContinue)
+    .addEdge("tools", "agent");
+  
+  // Инициализация памяти для сессий
+  const checkpointer = new MemorySaver();
+  
+  // Компиляция графа
+  const lang = graphs.compile({ checkpointer });
+
+
 
 const app = express();
 app.use(bodyParser.json());
@@ -30,50 +238,57 @@ app.post('/webhook', async (req: Request, res: Response) => {
     const yandexUserId = data.session.user_id;
     
     if (!userSessions[yandexUserId]) {
-        userSessions[yandexUserId] = initializeSession();
+        userSessions[yandexUserId] = await initializeSession();
     }
     const session = userSessions[yandexUserId];
 
     const savedUsers: Users = (session.savedUsers) ? session.savedUsers : (data.state?.user?.users || {});
 
+    const config = {
+        "configurable": {
+            "thread_id": session.workflow,
+            "auth_token": session.selectedUser?.auth,
+        }
+    };
 
-    if (session.endingSession) {
-        delete userSessions[yandexUserId];
-        endResponse(res, data, 'Всего доброго', savedUsers);
+    if(session.awaitingProccess){
+        if(session.proccessDone){
+            session.awaitingProccess = false;
+            sendResponse(session, res, data, session.awaitingResponseText, savedUsers);
+        } else {
+            sendResponse(session, res, data, 'Запрос в обработке, хотите продолжить?', savedUsers);
+        }
     }
-    else if (session.awaitingProccess) {
-        if(userInput.includes('нет')){
+    else{
+        session.proccessDone = false;
+        if (session.endingSession) {
             delete userSessions[yandexUserId];
             endResponse(res, data, 'Всего доброго', savedUsers);
         } else {
-            if (session.proccessDone){
-                session.awaitingProccess = false;
-                sendResponse(session, res, data, session.awaitingResponseText, savedUsers);
+            if (session.selectedUser && session.selectedUser.auth){
+                // Обрабатываем сообщение пользователя через граф
+                const proccess = new Promise(async (resolve) => {
+                    const finalState = await lang.invoke({ messages: [new HumanMessage(userInput)] }, config);
+                    console.log(finalState);
+                    console.log('-------------------------------------');
+                
+                    // Найдем последний ToolMessage в массиве сообщений
+                    const lastToolMessage = finalState.messages.reverse().find((message: { constructor: { name: string; }; }) => message.constructor.name === "ToolMessage");
+                
+                    // Если ToolMessage найден, то берем его content, иначе AIMessage
+                    session.awaitingResponseText = lastToolMessage ? lastToolMessage.content : finalState.messages[0].content;
+                    resolve(session.awaitingResponseText);
+                });
+                              
+                const responseText = await raceWithTimeout(proccess.finally(() => session.proccessDone = true), 'Запрос в обработке, хотите продолжить?', 2300);
+                sendResponse(session, res, data, responseText, savedUsers);
             } else {
-                session.awaitingProccess = true;
-                sendResponse(session, res, data, 'Запрос в обработке, хотите продолжить?', savedUsers);
+                main(data, userInput, session, res, savedUsers);
             }
-            
-            
         }
-    } else {
-        // resetSessionTimer(session, res, data, savedUsers);
-        session.proccessDone = false;
-        await main(data, userInput, session, res, savedUsers);
-
     }
-});
-
-// async function resetSessionTimer(session: Session, res: Response, data: any, savedUsers: Users) {
-//     if (session.timerCount) clearTimeout(session.timerCount);
-
     
-//     session.timerCount = setTimeout(() => {
-//         sendResponse(session, res, data, 'Ваш запрос обрабатывается, хотите продолжить?', savedUsers);
-//         session.awaitingProccess = true;
-//         session.timerCount = null;
-//     }, 1500)
-// }
+});
 
 async function raceWithTimeout(taskPromise: Promise<any>, timeoutMessage: string, timeoutDuration = 4500) {
     const timeout = new Promise((resolve) => {
@@ -90,23 +305,9 @@ async function main(data: any, userInput: string, session: Session, res: Respons
     let responseText = '';
 
     const entireProcessPromise = new Promise(async (resolve) => {
-        if (session.paymentOrder) {
-            responseText = await confirmingUserPayment(userInput, session, res);
-            session.awaitingResponseText = responseText;
-            resolve(responseText)
-        } else if (session.confirmingOrder) {
-            responseText = await confirmingUserOrder(userInput, session, res);
-            session.awaitingResponseText = responseText;
-            resolve(responseText);
-        } else if (session.selectedUser && session.selectedUser.auth) {
-            responseText = await processUserCommands(userInput, session, res);
-            session.awaitingResponseText = responseText;
-            resolve(responseText);
-        } else {
             responseText = await handleAuthFlow(userInput, session, res, savedUsers);
             session.awaitingResponseText = responseText;
             resolve(responseText);
-        }
     });
 
     // Используем Promise.race для отслеживания общего времени выполнения
@@ -214,116 +415,6 @@ async function handleAuthFlow(userInput: string, session: Session, res: Response
     return responseText;
 }
 
-async function processUserCommands(userInput: string, session: Session, res: Response): Promise<string> {
-    let responseText = "";
-
-    if (userInput.includes("новинки")) {
-        responseText = "Вот новинки: " + newProducts.map(product => `${product.name}: ${product.description}`).join(", ");
-    } 
-    else if(userInput.includes('заказ')){
-        responseText = 'Ваш заказ на ' + (await getCartProducts(session.workflow)).join(', ') + ' хотели бы заказать что-нибудь еще?'
-    }
-    else if(userInput.includes('достаточно') || userInput.includes('нет') || userInput.includes('все')){
-        responseText = 'Хотите оформить заказ на ' + (await getCartProducts(session.workflow)).join()
-        session.confirmingOrder = true
-    }
-    else if (userInput.includes("добавь") || userInput.includes("закажи")) {
-        if(session.selectedUser?.auth){
-            const products = await getLists(session.selectedUser?.auth, session.workflow);  // Fetch products using access token
-            const productToAdd = products.find(product => userInput.includes(product.title.toLowerCase()));
-            
-            if (productToAdd) {
-                const productsCount = await checkProducts(session.workflow, session.selectedUser.auth, productToAdd.id)
-                let hasInStock: string[] = [];
-                productsCount.forEach(el => {
-                    if(el.stockCount < 1) hasInStock.push(el.name);
-                });
-                if(hasInStock.length === 0){
-                    listToCart(session.selectedUser.auth, session.workflow, productToAdd.id)
-                    responseText = `${productToAdd.title} добавлен в корзину. Что-нибудь еще?`;  
-                } else {
-                    responseText = `Извините, но сейчас товаров: ${hasInStock.join(' ')} нет на складе, может вы хотели бы заказать что-нибудь еще?`
-                }
-                
-            } else {
-                responseText = "Продукт не найден. Пожалуйста, попробуйте снова.";
-            }
-        }
-        
-    } 
-    else {
-        responseText = "Неизвестная команда. Вы можете запросить новинки или добавить продукты в корзину. Для этого скажите слово перед названием списка \"Добавь\"";
-    }
-
-    return responseText;
-}
-
-async function confirmingUserOrder(userInput: string, session: Session, res: Response): Promise<string> {
-    let responseText = "";
-
-    if (userInput.includes("да")) {
-        if(session.selectedUser && session.selectedUser.auth){
-            const payment_card = await paymentCards(session.selectedUser?.auth, session.workflow);
-            const timeslot = await closestTimeSlot(session.workflow);
-            if(payment_card && timeslot){
-                const price = await workflowCheckout(session.workflow, session.selectedUser.auth, timeslot, payment_card);
-                session.priceOrder = price;
-                responseText = `Оплатить заказ на сумму ${price ? price : 'ошибка'} тенге?`;
-                session.paymentOrder = true;
-                session.confirmingOrder = false;
-            } else{
-                responseText = "Скорее всего у вас нет выбранной карты в приложении, пожалуйста подключите способ оплаты";
-            }
-        }
-        
-    } else if(userInput.includes('нет')){
-        responseText = 'Заказ отменен';
-        session.confirmingOrder = false;
-        session.endingSession = true;
-    } else {
-        responseText = "Извините я вас не поняла, хотите оформить заказ?";
-    }
-
-    return responseText;
-}
-
-async function confirmingUserPayment(userInput: string, session: Session, res: Response): Promise<string> {
-    let responseText = "";
-
-    if (userInput.includes("да")) {
-        if(session.selectedUser && session.selectedUser.auth){
-            if(await orderCreate(session.workflow, session.selectedUser.auth)){
-                console.log('order');
-                
-                const order_token = await paymentApply(session.workflow, session.selectedUser.auth);
-                if(order_token){
-                    console.log('order_token');
-                    
-                    const result = await paymentConfirm(session.workflow, session.selectedUser.auth);
-                    if(result){
-                        console.log('result');
-                        
-                        session.workflow = Promise.resolve(result.workflowUUID);
-                        responseText = `Ваш заказ на сумму ${session.priceOrder} тенге оформлен по адрессу ${result.deliveryInfo?.address}
-                         прибудет от ${result.deliveryInfo?.startTime} до ${result.deliveryInfo?.endTime}. Для завершения сесси скажите \"Хватит\"`;
-                        session.confirmingOrder = false;
-                        session.paymentOrder = false;
-                    }
-                }
-            } 
-        }
-        
-    } else if(userInput.includes('нет')){
-        responseText = 'Заказ отменен';
-        session.confirmingOrder = false;
-        session.paymentOrder = false;
-        session.endingSession = true;
-    } else {
-        responseText = "Извините я вас не поняла, хотите оплатить заказ?";
-    }
-
-    return responseText;
-}
 
 app.listen(3000, () => {
     console.log('Server is running on port 3000');

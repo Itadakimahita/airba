@@ -1,10 +1,17 @@
 {
   "dependencies": {
+    "@langchain/anthropic": "^0.3.5",
+    "@langchain/core": "^0.3.13",
+    "@langchain/langgraph": "^0.2.16",
+    "@langchain/ollama": "^0.1.0",
     "axios": "^1.7.2",
     "body-parser": "^1.20.2",
     "child_process": "^1.0.2",
     "cookie-parser": "^1.4.6",
-    "express": "^4.19.2"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "langchain": "^0.3.2",
+    "openai": "^4.68.2"
   },
   "devDependencies": {
     "@types/axios": "^0.14.0",

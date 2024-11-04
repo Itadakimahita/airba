@@ -1,12 +1,12 @@
 import apiClient from '../middleware/interceptor';
 
 //User cards
-export async function paymentCards(token: string, workflowId: Promise<string | null>): Promise<number | null> {
+export async function paymentCards(token: string, workflowId: string | null): Promise<number | null> {
     try {
         const response = await apiClient.get('/api/users/profile/cards/', {
             headers: {
                 'Authorization': `JWT ${token}`,
-                'workflow': await workflowId
+                'workflow': workflowId
             }
         });
 
@@ -22,11 +22,11 @@ export async function paymentCards(token: string, workflowId: Promise<string | n
 }
 
 // TimeSlot
-export async function closestTimeSlot(workflowId: Promise<string | null>) {
+export async function closestTimeSlot(workflowId: string | null) {
     try {
         const response = await apiClient.get('/api/deliveries/closest-timeslots/', {
             headers: { 
-                'workflow': await workflowId,
+                'workflow': workflowId,
             }
         });
         return response.data.data?.id;
@@ -37,7 +37,7 @@ export async function closestTimeSlot(workflowId: Promise<string | null>) {
 }
 
 //Checkout before Ordere create
-export async function workflowCheckout(workflowId: Promise<string | null>, token: string, timeslotId: number, paymentCardId: number) : Promise<number|null> {
+export async function workflowCheckout(workflowId: string | null, token: string, timeslotId: number, paymentCardId: number) : Promise<number|null> {
     try {
         const response = await apiClient.post('/api/orders/workflow/checkout-v2/', 
         {
@@ -55,7 +55,7 @@ export async function workflowCheckout(workflowId: Promise<string | null>, token
         {
             headers: { 
                 'Authorization': `JWT ${token}`,
-                'workflow': await workflowId,
+                'workflow': workflowId,
             }   
         });
 
@@ -70,13 +70,13 @@ export async function workflowCheckout(workflowId: Promise<string | null>, token
     }
 }
 
-export async function orderCreate(workflowId: Promise<string | null>, token: string) : Promise<number|null> {
+export async function orderCreate(workflowId: string | null, token: string) : Promise<number|null> {
     try {
         const response = await apiClient.post('/api/orders/', {},
         {
             headers: { 
                 'Authorization': `JWT ${token}`,
-                'workflow': await workflowId,
+                'workflow': workflowId,
             }   
         });
 
