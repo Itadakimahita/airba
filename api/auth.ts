@@ -1,12 +1,12 @@
 import apiClient from '../middleware/interceptor';
 
 // Sends SMS authorization
-export async function sendSMSAuthorization(number: string, workflowId: Promise<string | null>): Promise<void> {
+export async function sendSMSAuthorization(number: string, workflowId: string | null): Promise<void> {
     try {
         await apiClient.post('/api/v1/auth/signin/', { mobile_phone: number },
             {
                 headers: {
-                    'workflow': await workflowId
+                    'workflow': workflowId
                 }
             }
         );
@@ -17,7 +17,7 @@ export async function sendSMSAuthorization(number: string, workflowId: Promise<s
 }
 
 // Verifies OTP
-export async function verifySms(number: string, sms: string, workflowId: Promise<string | null>): Promise<[string | null, string | null]> {
+export async function verifySms(number: string, sms: string, workflowId: string | null): Promise<[string | null, string | null]> {
     try {
         // Оставляем только цифры в SMS-коде
         const cleanedSms = sms.replace(/\D/g, '');
@@ -28,7 +28,7 @@ export async function verifySms(number: string, sms: string, workflowId: Promise
         },
         {
             headers: {
-                'workflow': await workflowId
+                'workflow': workflowId
             }
         });
 
@@ -56,12 +56,12 @@ export async function refreshToken(refresh_token: string, token: string): Promis
 }
 
 // Retrieves lists
-export async function getLists(token: string, workflowId: Promise<string | null>): Promise<{ id: number, title: string }[]> {
+export async function getLists(token: string, workflowId: string | null): Promise<{ id: number, title: string }[]> {
     try {
         const response = await apiClient.get('/api/personal-lists/list', {
             headers: { 
                 'Authorization': `JWT ${token}`,
-                'workflow': await workflowId,
+                'workflow': workflowId,
             }
         });
         return response.data.data.map((list: any) => ({ id: list.id, title: list.title }));

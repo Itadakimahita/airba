@@ -1,14 +1,14 @@
 import apiClient from '../middleware/interceptor';
 
 // Retrieves lists
-export async function listToCart(token: string, workflowId: Promise<string | null>, id: number) {
+export async function listToCart(token: string, workflowId: string | null, id: number) {
     try {
         const response = await apiClient.post(`/api/personal-lists/list/${id}/cart`, {
         },
         {
             headers: {
                 'Authorization': `JWT ${token}`,
-                'workflow': await workflowId
+                'workflow':  workflowId
             }
         });
         return response.data;
@@ -17,11 +17,11 @@ export async function listToCart(token: string, workflowId: Promise<string | nul
         return [];
     }
 }
-export async function getCartProducts(workflowId: Promise<string | null>): Promise<string[]> {
+export async function getCartProducts(workflowId: string | null): Promise<string[]> {
     try {
         const response = await apiClient.get('/api/orders/cart/v3', {
             headers: { 
-                'workflow': await workflowId,
+                'workflow':  workflowId,
             }
         });
 
@@ -39,12 +39,12 @@ export async function getCartProducts(workflowId: Promise<string | null>): Promi
     }
 }
 
-export async function checkProducts(workflowId: Promise<string | null>, token: string, id: number): Promise<{ name: string, stockCount: number }[]> {
+export async function checkProducts(workflowId: string | null, token: string, id: number): Promise<{ name: string, stockCount: number }[]> {
     try {
         const response = await apiClient.get(`/api/personal-lists/list/${id}`, {
             headers: { 
                 'Authorization': `JWT ${token}`,
-                'workflow': await workflowId,
+                'workflow':  workflowId,
             }
         });
 

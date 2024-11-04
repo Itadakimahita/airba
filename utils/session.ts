@@ -6,7 +6,7 @@ export interface Sessions {
 }
 
 export interface Session {
-    workflow: Promise<string | null>;
+    workflow: string | null;
 
     savedUsers: Users | null;
 
@@ -27,9 +27,9 @@ export interface Session {
 }
 
 // Initialize a new session with the current user ID
-export const initializeSession = (): Session => {
+export const initializeSession = async (): Promise<Session> => {
     return {
-            workflow: getWorkflowId(),
+            workflow: await getWorkflowId(),
 
             savedUsers: null,
 
