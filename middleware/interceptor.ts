@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { apiConfig } from './config';
-import { userSessions } from '../app';
 
 // Set up Axios instance
 const apiClient = axios.create({
