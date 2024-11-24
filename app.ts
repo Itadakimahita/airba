@@ -5,7 +5,7 @@ import serveStatic from 'serve-static';
 
 import { sendSMSAuthorization, verifySms, getLists, refreshToken } from './api/auth';
 import { getNumberByName, extractNameAndNumber } from './utils/user';
-import { initializeSession, sendResponse, endResponse, createUserWithAccount, findUserByAccount } from './utils/session';
+import { initializeSession, sendResponse, endResponse, createUserWithAccount, findUserByAccount, waitingResponse } from './utils/session';
 import { apiConfig, updateTokens, refreshWorkflowId } from './middleware/config';  // Import the config and token update functions
 import { checkProducts, getCartProducts, listToCart } from './api/cart';
 import { closestTimeSlot, orderCreate, paymentCards, workflowCheckout } from './api/order';
@@ -23,7 +23,6 @@ import { ChatOllama } from '@langchain/ollama';
 import { getWorkflowId } from './middleware/config';
 
 import { CallbackHandler } from "langfuse-langchain";
-
 
 require('dotenv').config();
 
@@ -254,7 +253,7 @@ const confirmPaymentTool = tool(async ({ userInput }, config) => {
     })
   });
   
-const tools = [getCartProductsTool, listToCartTool, confirmOrderTool, confirmPaymentTool];
+const tools = [getCartProductsTool, listToCartTool, confirmOrderTool, confirmPaymentTool, changeUser];
 
 const langfuseHandler = new CallbackHandler({
     publicKey: process.env.PUBLIC_LANGFUSE_API_KEY,
@@ -263,7 +262,7 @@ const langfuseHandler = new CallbackHandler({
 });
 
 const model = new ChatOllama({
-    baseUrl: 'http://127.0.0.1:11434',
+    baseUrl: process.env.OLLAMA_URL,
     model: "llama3.1:8b",
     temperature: 0,
     callbacks: [langfuseHandler],
@@ -331,7 +330,7 @@ app.post('/webhook', async (req: Request, res: Response) => {
             await currentUser.update({status: 'в процессе'});
             await sendResponse(res, data, currentUser.last_response, currentUser);
         } else {
-            await sendResponse(res, data, 'Запрос в обработке, хотите продолжить?', currentUser);
+            await sendResponse(res, data, waitingResponse, currentUser);
         }
     }
     else{
@@ -413,7 +412,7 @@ async function main(data: any, userInput: string, currentUser: any, res: Respons
     });
 
     // Используем Promise.race для отслеживания общего времени выполнения
-    responseText = await raceWithTimeout(entireProcessPromise.finally(async () => await currentUser.update({response_refreshed: true})), 'Запрос в обработке, хотите продолжить?', 2300);
+    responseText = await raceWithTimeout(entireProcessPromise.finally(async () => await currentUser.update({response_refreshed: true})), waitingResponse, 2300);
     await sendResponse(res, data, responseText, currentUser);
 }
 
@@ -526,7 +525,7 @@ const db_start = async () => {
     }
 }
 
-app.listen(3000, () => { 
+app.listen(process.env.PORT, () => { 
     db_start()
-    console.log('Server is running on port 3000');
+    console.log(`Server is running on port ${process.env.PORT}`);
 });

@@ -2,11 +2,15 @@ import { Sequelize, DataTypes } from 'sequelize';
 
 require('dotenv').config();
 
-const sequelize = new Sequelize(process.env.DB_NAME as string, process.env.DB_SERVER as string, process.env.DB_PASSWORD, {
-  host: 'localhost',
-  port: 8000,
-  dialect: 'postgres',
+// Читаем переменные окружения
+const sequelize = new Sequelize(process.env.DATABASE_URL as string, {
+  dialect: "postgres",
+  dialectOptions: {
+    ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  },
 });
+
+
 
 // Define the Dialog model
 const Dialog = sequelize.define('dialog', {
@@ -95,10 +99,49 @@ UserDialogState.belongsTo(DialogState, { foreignKey: 'dialog_state_id' });
 UserAccount.hasMany(UserDialogState, { foreignKey: 'user_account_id' });
 Dialog.hasMany(UserDialogState, { foreignKey: 'dialog_id' });
 
-// Sync models with the database
+const seedData = async () => {
+  try {
+    // Create or find the 'auth' dialog
+    const [authDialog] = await Dialog.findOrCreate({
+      where: { type: 'auth' },
+      defaults: { type: 'auth' },
+    }) as any;
+
+    // Add dialog states for 'auth'
+    const authStates = [
+      { step: 1, step_name: 'addingUser', function_call: 'handleAuthFlow', dialog_id: authDialog.id },
+      { step: 2, step_name: 'selectingUser', function_call: 'handleAuthFlow', dialog_id: authDialog.id },
+      { step: 3, step_name: 'awaitingAuth', function_call: 'handleAuthFlow', dialog_id: authDialog.id },
+      { step: 4, step_name: 'awaitingOtp', function_call: 'handleAuthFlow', dialog_id: authDialog.id },
+    ];
+    await DialogState.bulkCreate(authStates, { ignoreDuplicates: true });
+
+    // Create or find the 'main' dialog
+    const [mainDialog] = await Dialog.findOrCreate({
+      where: { type: 'main' },
+      defaults: { type: 'main' },
+    }) as any;
+
+    // Add dialog states for 'main'
+    const mainStates = [
+      { step: 1, step_name: 'addingUser', function_call: 'handleAuthFlow', dialog_id: mainDialog.id },
+      { step: 2, step_name: 'selectingUser', function_call: 'handleAuthFlow', dialog_id: mainDialog.id },
+      { step: 3, step_name: 'awaitingAuth', function_call: 'handleAuthFlow', dialog_id: mainDialog.id },
+      { step: 4, step_name: 'awaitingOtp', function_call: 'handleAuthFlow', dialog_id: mainDialog.id },
+    ];
+    await DialogState.bulkCreate(mainStates, { ignoreDuplicates: true });
+
+    console.log('Data seeding completed successfully');
+  } catch (error) {
+    console.error('Error during data seeding:', error);
+  }
+};
+
+// Sync and seed data
 sequelize.sync({ force: false })
-  .then(() => {
+  .then(async () => {
     console.log('Models synced successfully');
+    await seedData();
   })
   .catch((error) => {
     console.error('Error syncing models:', error);
