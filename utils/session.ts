@@ -118,19 +118,35 @@ export async function findUserByAccount(userAccountId: any, name: string) {
   }
 }
 
+export const waitingResponse = 'Я обрабатываю ваш запрос, пожалуйста переспросите меня позже <speaker audio="alice-sounds-nature-sea-2.opus">'
+
 export const sendResponse = async (res: any, data: any, text: string, userAccount: any): Promise<void> => {
-    if(text === 'Запрос в обработке, хотите продолжить?') await userAccount.update({status: 'в ожидании'});
+    if(text === waitingResponse){
+        await userAccount.update({status: 'в ожидании'});
+        res.json({
+            response: {
+                text: 'Я обрабатываю ваш запрос, пожалуйста переспросите меня позже',
+                tts: waitingResponse,
+                end_session: false,
+            },
+            session: data.session,
+            // user_state_update: {value: null, users: savedUsers},
+            version: data.version,
+        })    
+    } else {
+        res.json({
+            response: {
+                text: text,
+                end_session: false,
+            },
+            session: data.session,
+            // user_state_update: {value: null, users: savedUsers},
+            version: data.version,
+        })
+    }
 
     
-    res.json({
-        response: {
-            text: text,
-            end_session: false,
-        },
-        session: data.session,
-        // user_state_update: {value: null, users: savedUsers},
-        version: data.version,
-    })
+    
     
 };
 
