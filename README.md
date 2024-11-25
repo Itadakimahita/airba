@@ -1,4 +1,4 @@
-# Airba fresh yandex skill
+# Airba fresh Alisa
 
 Yandex skill to order products from airba fresh
 
@@ -10,6 +10,13 @@ Yandex skill to order products from airba fresh
    ```bash
    npm install
 
-2. To run programm:
-    ```bash
-    npx ts-node app.ts
+2. Set up enviroment using dependencies from:
+   ```
+   .local.env
+
+3. Docker run
+
+4. Run ollama model in ollama docker container:
+   ```bash
+   ollama run llama3.1:8b
+
