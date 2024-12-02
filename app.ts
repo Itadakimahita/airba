@@ -61,9 +61,9 @@ const changeUser = tool(async ({userInput}, config) => {
     return responseText;
 }, {
     name: "changeActiveUser",
-    description: "Change user to another one by name or just calling it",
+    description: "Пользователь хочет поменять свой аккаунт по имени",
     schema: z.object({
-        userInput: z.string().describe('It should get user name that user want to change to')
+        userInput: z.string().describe('Получает имя пользователя на которого он хочет сменить')
     }),
 });
 
@@ -75,10 +75,7 @@ const getCartProductsTool = tool(async ({}, config) => {
     return responseText;
 }, {
     name: "getCartProducts",
-    description: "Get products from cart or show order and products",
-    schema: z.object({
-        workflow: z.string().describe("Workflow ID"),
-    }),
+    description: "Пользователь запрашивает псмотреть его корзину или заказ"
 });
 
 const listToCartTool = tool(async ({ userInput }, config) => {
@@ -133,9 +130,9 @@ const listToCartTool = tool(async ({ userInput }, config) => {
     }
 }, {
     name: "listToCart",
-    description: "Add product to cart or order",
+    description: "Добавить список продуктов в корзину или заказ",
     schema: z.object({
-        userInput: z.string().describe("User input containing product list name user asking to add product name or list name to cart(dont change list name)")
+        userInput: z.string().describe("Передай сообщение пользователя без изменений")
     }),
 });
 
@@ -179,7 +176,7 @@ const confirmOrderTool = tool(async ({ userInput }, config) => {
         }
 }, {
     name: "confirmOrder",
-    description: "Confirm the order placement after adding listToCart when user want to finish their order",
+    description: "Подтверить заказ или оформить корзину так же пользователь может сказать \"нет\" после добавления списка продуктов в корзину чтобы перейти к оформлению",
     schema: z.object({
         userInput: z.string().describe("User's input for confirming the order")
     })
@@ -247,7 +244,7 @@ const confirmPaymentTool = tool(async ({ userInput }, config) => {
     return "Ошибка при подтверждении оплаты. Попробуйте снова.";
   }, {
     name: "confirmPayment",
-    description: "Confirm the payment for the order call it after confirming the order =",
+    description: "Подтверждение оплаты вызывается когда пользователь уже подтвердил заказ, он может сказать \"да\" для оплаты",
     schema: z.object({
       userInput: z.string().describe("User's input for confirming the payment, it should be some confirm message after order")
     })
@@ -262,7 +259,7 @@ const langfuseHandler = new CallbackHandler({
 });
 
 const model = new ChatOllama({
-    baseUrl: process.env.OLLAMA_URL,
+    baseUrl: process.env.OLLAMA_BASE_URL,
     model: "llama3.1:8b",
     temperature: 0,
     callbacks: [langfuseHandler],

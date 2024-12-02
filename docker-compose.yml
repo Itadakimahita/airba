@@ -13,9 +13,10 @@ services:
     depends_on:
       - db
       - ollama
+      - ollama-pull
     environment:
       DATABASE_URL: ${DATABASE_URL}
-      OLLAMA_URL: ${OLLAMA_URL}
+      OLLAMA_URL: ${OLLAMA_BASE_URL}
     volumes:
       - .:/app # Проброс текущей директории для разработки
     command: npx ts-node app.ts
@@ -40,9 +41,23 @@ services:
     ports:
       - "11434:11434"
     healthcheck:
-      test: ["CMD", "ollama", "--version"]
+      test: ["CMD", "curl", "-f", "http://localhost:11434"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
-      - ./ollama_data:/data
+      - ollama_data:/root/.ollama
+
+  ollama-pull:
+    image: docker/genai:ollama-pull
+    env_file:
+      - .env
+    environment:
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      LLM: ${LLM}
+      
 
 volumes:
   db_data:
+  ollama_data:
+
