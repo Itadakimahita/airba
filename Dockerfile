@@ -1,17 +1,15 @@
 
-FROM node:18
+FROM node:latest
 
-WORKDIR /app
+# Create app directory for the docker image
+RUN mkdir -p /usr/src/app
+WORKDIR /usr/src/app/
 
-COPY package*.json ./
 
+# Bundle app source
+COPY . /usr/src/app
 RUN npm install
-
-COPY . .
 
 EXPOSE 3000
 
-# Указываем команду по умолчанию
-CMD ["npx", "ts-node", "app.ts"]
-
-
+CMD ["node", "app.ts"]

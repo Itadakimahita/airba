@@ -260,7 +260,7 @@ const langfuseHandler = new CallbackHandler({
 
 const model = new ChatOllama({
     baseUrl: process.env.OLLAMA_BASE_URL,
-    model: "llama3.1:8b",
+    model: process.env.LLM,
     temperature: 0,
     callbacks: [langfuseHandler],
 }).bindTools(tools);
