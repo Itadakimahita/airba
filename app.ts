@@ -67,6 +67,16 @@ const changeUser = tool(async ({userInput}, config) => {
     }),
 });
 
+
+const helpInstruction = tool(async ({}, config) => {
+    let responseText = `Для того чтобы заказть продукты, пожалуйста скажите название вашего списка, так же вы можете сменить пользователя.`
+
+    return responseText;
+}, {
+    name: "helpInstruction",
+    description: "Инструкция пользователю",
+});
+
 // Добавляем другие инструменты для корзины и продуктов
 const getCartProductsTool = tool(async ({}, config) => {
     const configuration = config['configurable'];
@@ -250,7 +260,7 @@ const confirmPaymentTool = tool(async ({ userInput }, config) => {
     })
   });
   
-const tools = [getCartProductsTool, listToCartTool, confirmOrderTool, confirmPaymentTool, changeUser];
+const tools = [getCartProductsTool, listToCartTool, confirmOrderTool, confirmPaymentTool, changeUser, helpInstruction];
 
 const langfuseHandler = new CallbackHandler({
     publicKey: process.env.PUBLIC_LANGFUSE_API_KEY,
