@@ -434,85 +434,92 @@ async function handleAuthFlow(userInput: string, userAccount: any) {
 
     
 
-    // Step 1: Adding a New User
-    if (userInput.includes('новый')) {
-        const nextState = await DialogState.findOne({ where: { step: 1, dialog_id: dialog.id } }) as any;
-        await userDialogState.update({ dialog_state_id: nextState.id, step: nextState.step });
-        responseText = 'Пожалуйста добавьте пользователя, для этого скажите имя и номер телефона';
-    } else if (userDialogState.step === 1) {
-        const [name, number] = extractNameAndNumber(userInput);
-        if (name && number) {
-            const newUser = await createUserWithAccount(userAccount.id, name, number);
-            console.log(newUser);
-            if(newUser){
-                responseText = `Пользователь ${name} добавлен. Выберите пользователя, сказав его имя.`;
+    
+    if(userInput.includes('помощь') || userInput.includes('умеешь')){
+        responseText = 'Авторизуйтесь для того чтобы заказать продукты, для этого скажите название нужного вам списка';
+    } 
+    else{
+        // Step 1: Adding a New User
+        if (userInput.includes('новый')) {
+            const nextState = await DialogState.findOne({ where: { step: 1, dialog_id: dialog.id } }) as any;
+            await userDialogState.update({ dialog_state_id: nextState.id, step: nextState.step });
+            responseText = 'Пожалуйста добавьте пользователя, для этого скажите имя и номер телефона';
+        } else if (userDialogState.step === 1) {
+            const [name, number] = extractNameAndNumber(userInput);
+            if (name && number) {
+                const newUser = await createUserWithAccount(userAccount.id, name, number);
+                console.log(newUser);
+                if(newUser){
+                    responseText = `Пользователь ${name} добавлен. Выберите пользователя, сказав его имя.`;
+                
+                    // Set to Step 2 - Selecting User
+                    const nextState = await DialogState.findOne({ where: { step: 2, dialog_id: dialog.id } }) as any;
+                    await userDialogState.update({ dialog_state_id: nextState.id, step: nextState.step });
+                }
+                
+                
+            } else if (associatedUsers.length === 0) {
+                // No users found, prompt to add a new user and set state to Step 1 (addingUser)
+                responseText = "Добавьте нового пользователя сказав имя и номер телефона";
             
-                // Set to Step 2 - Selecting User
-                const nextState = await DialogState.findOne({ where: { step: 2, dialog_id: dialog.id } }) as any;
-                await userDialogState.update({ dialog_state_id: nextState.id, step: nextState.step });
+                const initialState = await DialogState.findOne({ where: { step: 1, dialog_id: dialog.id } }) as any;
+                await userDialogState.update({ dialog_state_id: initialState.id, step: initialState.step });
+            } else {
+            responseText = "Ошибка добавления пользователя. Пожалуйста, повторите.";
             }
-            
-            
-        } else if (associatedUsers.length === 0) {
-            // No users found, prompt to add a new user and set state to Step 1 (addingUser)
-            responseText = "Добавьте нового пользователя сказав имя и номер телефона";
-        
-            const initialState = await DialogState.findOne({ where: { step: 1, dialog_id: dialog.id } }) as any;
-            await userDialogState.update({ dialog_state_id: initialState.id, step: initialState.step });
-        } else {
-        responseText = "Ошибка добавления пользователя. Пожалуйста, повторите.";
         }
-    }
-  
-    // Step 2: Selecting User
-    else if (userDialogState.step === 2) {
-        const user = await findUserByAccount(userAccount.id, userInput) as any;
-        if (user) {
-            await user.update({active: true});
-            if (user.auth_token && user.refresh_token) {
-                const newToken = await refreshToken(user.auth_token, user.refresh_token);
-                if (newToken) {
-                    await user.update({ auth_token: newToken, active: true });
-                    responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину.";
+    
+        // Step 2: Selecting User
+        else if (userDialogState.step === 2) {
+            const user = await findUserByAccount(userAccount.id, userInput) as any;
+            if (user) {
+                await user.update({active: true});
+                if (user.auth_token && user.refresh_token) {
+                    const newToken = await refreshToken(user.auth_token, user.refresh_token);
+                    if (newToken) {
+                        await user.update({ auth_token: newToken, active: true });
+                        responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину.";
+                    } else {
+                        await sendSMSAuthorization(user.number, userAccount.workflow_id);
+                        responseText = `Для пользователя ${user.name} отправлено SMS. Скажите код.`;
+
+                        // Set to Step 4 - Awaiting OTP
+                        const nextState = await DialogState.findOne({ where: { step: 4, dialog_id: dialog.id } }) as any;
+                        await userDialogState.update({ dialog_state_id: nextState.id, step: nextState.step });
+                        }
                 } else {
+                    
                     await sendSMSAuthorization(user.number, userAccount.workflow_id);
                     responseText = `Для пользователя ${user.name} отправлено SMS. Скажите код.`;
 
                     // Set to Step 4 - Awaiting OTP
                     const nextState = await DialogState.findOne({ where: { step: 4, dialog_id: dialog.id } }) as any;
                     await userDialogState.update({ dialog_state_id: nextState.id, step: nextState.step });
-                    }
+                }
             } else {
-                
-                await sendSMSAuthorization(user.number, userAccount.workflow_id);
-                responseText = `Для пользователя ${user.name} отправлено SMS. Скажите код.`;
+                responseText = 'Выберите пользователя из существующих: ' + associatedUsers.map((user: { name: any; }) => user.name).join(', ');
 
-                // Set to Step 4 - Awaiting OTP
-                const nextState = await DialogState.findOne({ where: { step: 4, dialog_id: dialog.id } }) as any;
+            }
+        }
+    
+        // Step 4: Awaiting OTP Verification
+        else if (userDialogState.step === 4) {
+            const user = await User.findOne({ where: { user_account_id: userAccount.id, active: true } }) as any;
+            
+            const [accessToken, refreshToken] = await verifySms(user.number, userInput, userAccount.workflow_id);
+            if (accessToken && refreshToken) {
+                await user.update({ auth_token: accessToken, refresh_token: refreshToken, active: true, confirmed: true });
+                const nextState = await DialogState.findOne({ where: { step: 2, dialog_id: dialog.id } }) as any;
                 await userDialogState.update({ dialog_state_id: nextState.id, step: nextState.step });
+                responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину.";
+            } else {
+                responseText = "Неверный код. Попробуйте снова.";
             }
         } else {
-            responseText = 'Выберите пользователя из существующих: ' + associatedUsers.map((user: { name: any; }) => user.name).join(', ');
-
+        responseText = "Неопознанное действие. Попробуйте еще раз.";
         }
     }
-  
-    // Step 4: Awaiting OTP Verification
-    else if (userDialogState.step === 4) {
-        const user = await User.findOne({ where: { user_account_id: userAccount.id, active: true } }) as any;
-        
-        const [accessToken, refreshToken] = await verifySms(user.number, userInput, userAccount.workflow_id);
-        if (accessToken && refreshToken) {
-            await user.update({ auth_token: accessToken, refresh_token: refreshToken, active: true, confirmed: true });
-            const nextState = await DialogState.findOne({ where: { step: 2, dialog_id: dialog.id } }) as any;
-            await userDialogState.update({ dialog_state_id: nextState.id, step: nextState.step });
-            responseText = "Авторизация успешна. Теперь вы можете запросить новинки или добавить продукты в корзину.";
-        } else {
-            responseText = "Неверный код. Попробуйте снова.";
-        }
-    } else {
-      responseText = "Неопознанное действие. Попробуйте еще раз.";
-    }
+    
   
     return responseText;
   }
