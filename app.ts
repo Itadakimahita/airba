@@ -88,12 +88,14 @@ const getCartProductsTool = tool(async ({}, config) => {
     description: "Пользователь запрашивает псмотреть его корзину или заказ"
 });
 
-const listToCartTool = tool(async ({ userInput }, config) => {
+const listToCartTool = tool(async ({  }, config) => {
     // Проверяем, есть ли auth и workflow в сессии
     const configuration = config['configurable'];
     const userAccount = configuration['userAccount']
     const workflow = configuration['userAccount'].workflow_id;
     const auth = configuration['activeUser'].auth_token;
+
+    const userInput = configuration['userInput'];
 
     if (!auth || !workflow) {
         return "Ошибка: не удалось найти авторизационные данные. Пожалуйста, войдите в систему.";
@@ -396,6 +398,7 @@ async function main(data: any, userInput: string, currentUser: any, res: Respons
                         "callbacks": [langfuseHandler],
                         "userAccount": currentUser,
                         "activeUser": user,
+                        "userInput": userInput,
                     }
                 };
                     // Обрабатываем сообщение пользователя через граф
