@@ -411,7 +411,7 @@ async function main(data: any, userInput: string, currentUser: any, res: Respons
                 const lastToolMessage = finalState.messages.reverse().find((message: { constructor: { name: string; }; }) => message.constructor.name === "ToolMessage");
             
                 // Если ToolMessage найден, то берем его content, иначе AIMessage
-                await currentUser.update({last_response: lastToolMessage ? lastToolMessage.content : finalState.messages[0].content});
+                await currentUser.update({last_response: lastToolMessage ? lastToolMessage.content : 'Для того чтобы заказть продукты, пожалуйста скажите название вашего списка, так же вы можете сменить пользователя.'});
                 resolve(currentUser.last_response);
             }
         } else {
